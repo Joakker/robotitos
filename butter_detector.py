@@ -160,9 +160,8 @@ def analyze(image):
     filtered_contours = [contour for contour in filtered_contours if contour.size>0]
     #filter out puny stuff
     filtered_contours = [contour for contour in filtered_contours if cv.contourArea(contour)>300]
-    print(len(filtered_contours))
 
-    if len(filtered_contours)<=0: return image
+    if len(filtered_contours)<=0: return None
 
     #butter_contour will be the butteriest of the contours, not guaranteed to actually be butter
     butter_contour = filtered_contours[0]
@@ -180,27 +179,62 @@ def analyze(image):
     else:
         # In case of zero division, set a default position
         cX, cY = butter_contour[0][0][0], butter_contour[0][0][1]
+    if maxbutt>100:
+        return [cX/300,cY/300]
+    else:
+        return None
 
-    # draw the butter contour along with its butteriness value
-    output = cv.resize(original_image, (300, 300), interpolation=cv.INTER_LINEAR)
-    #if(maxbutt<150): return output
-    cv.drawContours(output, [butter_contour], -1, (0, 255, 0), 5)
-    cv.putText(output, f'{maxbutt:.2f}', (cX, cY),
-               cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
-    #debug
-    #cv.drawContours(output,contours,-1, (255, 0, 255), 1)
 
-    return image
+class ButterDetector:
+    possible_butters = []
+    def receive_frame(self,frame):
+        coords = analyze(frame)
+        for b in self.possible_butters:
+            b[1] -= 1
+            if b[1]>150: b[1]=150
+            if b[1]<0:
+                self.possible_butters.remove(b)
+        if coords is None: return
+        for b in self.possible_butters:
+            d = math.sqrt((coords[0]-b[0][0])**2+(coords[1]-b[0][1])**2)
+            if d<0.008:
+                b[0][0] = (b[0][0]+coords[0]*2)/3
+                b[0][1] = (b[0][1]+coords[1]*2)/3
+                b[1] += 3
+                return
+        self.possible_butters.append([coords,3])
+    #returns the position of the butter. None if there isn't butter
+    #note the coordinates are between 0 and 1
+    def get_butter(self):
+        ans=[[0,0],-1]
+        for b in self.possible_butters:
+            if b[1]>ans[1]:
+                ans = b
+        if ans[1]>10:
+            return ans[0]
+        else:
+            return None
+
+
+
 
 def main():
+    buttDetector = ButterDetector()
     vid = cv.VideoCapture(2)
     if not vid.isOpened():
         print("Cannot open webcam")
         exit()
-    while(True):
+    while True:
         ret,frame = vid.read()
-        cv.imshow('image',frame)
-        cv.imshow("anal",analyze(frame))
+        buttDetector.receive_frame(frame)
+        butter = buttDetector.get_butter()
+        height, width = frame.shape[:2]
+
+        if butter is not None:
+            frame =cv.circle(frame, (int(width*butter[0]), int(height*butter[1])), radius=5, color=(0, 0, 255), thickness=-1)
+
+        cv.imshow('image', frame)
+
         if cv.waitKey(1) == ord('q'):
             break
     vid.release()
