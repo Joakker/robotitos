@@ -116,6 +116,14 @@ def increase_saturation(image, amount=1.5):
     # Convert back to BGR color space
     return cv.cvtColor(hsv_enhanced, cv.COLOR_HSV2BGR)
 
+
+class Butter:
+    position = [0,0]
+    butter_score = 0
+    def __init__(self,position,butter_score):
+        self.position = position
+        self.butter_score = butter_score
+
 def analyze(image):
     original_image = image
     #resize, we don't need all those pixels
@@ -180,8 +188,9 @@ def analyze(image):
         # In case of zero division, set a default position
         cX, cY = butter_contour[0][0][0], butter_contour[0][0][1]
     value_threshold = 100
-    if maxbutt>value_threshold:
-        return [cX/300,cY/300]
+    returnButt = Butter([cX/300,cY/300],maxbutt)
+    if returnButt.butter_score > value_threshold:
+        return returnButt
     else:
         return None
 
@@ -190,16 +199,19 @@ class PossibleButter:
     permanenceScore = 0
     max_score = 200
     momentum = [0,0]
-    def __init__(self,pos, initialScore=100):
+    butter_score = 0
+    def __init__(self,pos,butter_score, initialScore=100):
         self.position = pos
         self.permanenceScore = initialScore
         self.momentum = [0,0]
+        self.butter_score = butter_score
     def increaseScore(self, amount):
         self.permanenceScore += amount
         if(self.permanenceScore>self.max_score):
             self.permanenceScore = self.max_score
     def decreaseScore(self):
         self.permanenceScore -= 1
+        if self.permanenceScore<0: self.permanenceScore = 0
     def mightBeMe(self,other):
         wasItMe = False
         p = self.position
@@ -212,6 +224,7 @@ class PossibleButter:
             newpos = [(p[0]+other.position[0])/2,(p[1]+other.position[1])/2]
             self.momentum = [newpos[0]-p[0],newpos[1]-p[1]]
             self.position = newpos
+            self.butter_score = (self.butter_score*2+other.butter_score)/3
             wasItMe = True
         return wasItMe
 
@@ -223,9 +236,9 @@ class ButterDetector:
             b.decreaseScore()
             if b.permanenceScore<0:
                 self.possible_butters.remove(b)
-        butt_pos = analyze(frame)
-        if butt_pos is None: return
-        new_butt = PossibleButter(butt_pos)
+        butt_anal = analyze(frame)
+        if butt_anal is None: return
+        new_butt = PossibleButter(butt_anal.position,butt_anal.butter_score)
         for b in self.possible_butters:
             if b.mightBeMe(new_butt):
                 b.increaseScore(10)
@@ -234,13 +247,13 @@ class ButterDetector:
     #returns the position of the butter. None if there isn't butter
     #note the coordinates are between 0 and 1
     def get_butter(self):
-        ans = PossibleButter(None,-1)
+        ans = PossibleButter(None,-1,-1)
         for b in self.possible_butters:
             if b.permanenceScore > ans.permanenceScore:
                 ans = b
         if ans.permanenceScore>10:
             print(ans.permanenceScore)
-            return ans.position
+            return Butter(ans.position,ans.butter_score)
         else:
             return None
 
@@ -257,7 +270,7 @@ def main():
         ret,frame = vid.read()
         buttDetector.receive_frame(frame)
         butter = buttDetector.get_butter()
-        print(str(butter[0])+" "+str(butter[1]))
+        print(str(butter.position[0])+" "+str(butter.position[1])+" "+butter.butter_score)
         if cv.waitKey(1) == ord('q'):
             break
     vid.release()
