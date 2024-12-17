@@ -16,6 +16,11 @@ class GTG(Node):
     dada por `sys.argv`.
     """
 
+    dtol: float
+    """Distance Tolerance. Qué tan lejos podemos quedar del objetivo sin problema"""
+    atol: float
+    """Angular Tolerance. Qué tanta diferencia podemos tolerar entre el ángulo actual y el objetivo"""
+
     cmd_vel: Publisher
     """Recibe y publica el mensaje para transportar el robot"""
     pose_sub: Subscription
@@ -33,6 +38,9 @@ class GTG(Node):
         )
         self.timer = self.create_timer(0.1, self.go_to_goal)
         self.pose = Pose()
+
+        self.atol = 0.01
+        self.dtol = 0.10
 
     def pose_callback(self, data: Pose):
         """
@@ -58,19 +66,19 @@ class GTG(Node):
         a2g = math.atan2(goal.y - self.pose.y, goal.x - self.pose.x)
         d2g = math.sqrt((goal.x - self.pose.x) ** 2 + (goal.y - self.pose.y) ** 2)
 
-        dtol = 0.10
-        atol = 0.01
-
-        a_error = a2g - self.pose.theta
-        self.log(f"{a_error = }")
         kp = 10.0
 
-        if abs(a_error) > atol:
-            new_vel.angular.z = a_error * kp
-        elif d2g >= dtol:
-            new_vel.linear.x = kp * d2g
+        if d2g <= self.dtol:
+            # Tenemos que rotar hasta `goal.theta`
+            new_vel.angular.z = goal.theta - self.pose.theta
         else:
-            new_vel.linear.x = 0.0
+            # Rotamos hacia la posición
+            new_vel.linear.x = kp * d2g
+            a_error = a2g - self.pose.theta
+            if abs(a_error) > self.atol:
+                new_vel.angular.z = a_error * kp
+
+        if d2g <= self.dtol and abs(goal.theta - self.pose.theta) <= self.atol:
             self.cmd_vel.publish(new_vel)
             self.log("Goal Reached")
             quit()
@@ -83,6 +91,7 @@ class GTG(Node):
 
 
 def main(args=None):
+    """Punto de entrada al nodo"""
     rclpy.init(args=args)
     minimal_pub = GTG()
     rclpy.spin(minimal_pub)
