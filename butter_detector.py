@@ -5,8 +5,6 @@ import cv2 as cv
 import numpy as np
 import math
 
-from cv2 import minAreaRect
-from pygame.transform import threshold
 
 
 #a simple function to test different butter images I have saved. I'ts not actually needed
@@ -259,13 +257,7 @@ def main():
         ret,frame = vid.read()
         buttDetector.receive_frame(frame)
         butter = buttDetector.get_butter()
-        height, width = frame.shape[:2]
-
-        if butter is not None:
-            frame =cv.circle(frame, (int(width*butter[0]), int(height*butter[1])), radius=5, color=(0, 0, 255), thickness=-1)
-
-        cv.imshow('image', frame)
-
+        print(str(butter[0])+" "+str(butter[1]))
         if cv.waitKey(1) == ord('q'):
             break
     vid.release()
