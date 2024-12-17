@@ -6,6 +6,8 @@ import numpy as np
 import math
 
 from cv2 import minAreaRect
+from pygame.transform import threshold
+
 
 #a simple function to test different butter images I have saved. I'ts not actually needed
 def get_image(n):
@@ -52,7 +54,7 @@ def remove_spikes(polygon):
 #returns how much butter-like a contour is
 def butteriness(image_hsv,contour):
     ideal_butter_ratio = 1.7
-    ideal_butter_color = [60,100,200]
+    ideal_butter_color = [60,100,210] #hsv
     score = 0
     mean = contour_mean(image_hsv,contour)
     color_distance = 1
@@ -179,39 +181,68 @@ def analyze(image):
     else:
         # In case of zero division, set a default position
         cX, cY = butter_contour[0][0][0], butter_contour[0][0][1]
-    if maxbutt>100:
+    value_threshold = 100
+    if maxbutt>value_threshold:
         return [cX/300,cY/300]
     else:
         return None
+
+class PossibleButter:
+    position = [0,0]
+    permanenceScore = 0
+    max_score = 200
+    momentum = [0,0]
+    def __init__(self,pos, initialScore=100):
+        self.position = pos
+        self.permanenceScore = initialScore
+        self.momentum = [0,0]
+    def increaseScore(self, amount):
+        self.permanenceScore += amount
+        if(self.permanenceScore>self.max_score):
+            self.permanenceScore = self.max_score
+    def decreaseScore(self):
+        self.permanenceScore -= 1
+    def mightBeMe(self,other):
+        wasItMe = False
+        p = self.position
+        m = self.momentum
+        estimatedNextPosition = [p[0]+m[0],p[1]+m[1]]
+        dx = abs(estimatedNextPosition[0] - other.position[0])
+        dy = abs(estimatedNextPosition[1] - other.position[1])
+        dis = math.sqrt(dx**2+dy**2)
+        if dis<0.1:
+            newpos = [(p[0]+other.position[0])/2,(p[1]+other.position[1])/2]
+            self.momentum = [newpos[0]-p[0],newpos[1]-p[1]]
+            self.position = newpos
+            wasItMe = True
+        return wasItMe
 
 
 class ButterDetector:
     possible_butters = []
     def receive_frame(self,frame):
-        coords = analyze(frame)
         for b in self.possible_butters:
-            b[1] -= 1
-            if b[1]>150: b[1]=150
-            if b[1]<0:
+            b.decreaseScore()
+            if b.permanenceScore<0:
                 self.possible_butters.remove(b)
-        if coords is None: return
+        butt_pos = analyze(frame)
+        if butt_pos is None: return
+        new_butt = PossibleButter(butt_pos)
         for b in self.possible_butters:
-            d = math.sqrt((coords[0]-b[0][0])**2+(coords[1]-b[0][1])**2)
-            if d<0.008:
-                b[0][0] = (b[0][0]+coords[0]*2)/3
-                b[0][1] = (b[0][1]+coords[1]*2)/3
-                b[1] += 3
+            if b.mightBeMe(new_butt):
+                b.increaseScore(10)
                 return
-        self.possible_butters.append([coords,3])
+        self.possible_butters.append(new_butt)
     #returns the position of the butter. None if there isn't butter
     #note the coordinates are between 0 and 1
     def get_butter(self):
-        ans=[[0,0],-1]
+        ans = PossibleButter(None,-1)
         for b in self.possible_butters:
-            if b[1]>ans[1]:
+            if b.permanenceScore > ans.permanenceScore:
                 ans = b
-        if ans[1]>10:
-            return ans[0]
+        if ans.permanenceScore>10:
+            print(ans.permanenceScore)
+            return ans.position
         else:
             return None
 
