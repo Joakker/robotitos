@@ -4,20 +4,20 @@ from gpiozero.pins.mock import MockFactory, MockPWMPin
 from time import sleep
 
 # Configuración del simulador
-Device.pin_factory = MockFactory(pin_class=MockPWMPin)
+#Device.pin_factory = MockFactory(pin_class=MockPWMPin)
 
 # Configuración del servo
-servo = Servo(17)
+servo = Servo(0)
 
-def set_angle(angle):
-    # Convertir el ángulo a un valor entre -1 y 1
-    value = (angle / 180) * 2 - 1
-    servo.value = value
-    sleep(1)
+def set_angle():
+    while True:    
+        servo.min()
+        sleep(1)
+        servo.mid()
+        sleep(1)
+        servo.max()
+        sleep(1)
 
-try:
-    while True:
-        angle = float(input("Ingrese el ángulo (0 a 180): "))
-        set_angle(angle)
-except KeyboardInterrupt:
-    pass
+
+if __name__ == "__main__":
+    set_angle();

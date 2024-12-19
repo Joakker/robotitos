@@ -5,6 +5,17 @@ import cv2 as cv
 import numpy as np
 import math
 
+import RPi.GPIO as GPIO
+import time
+GPIO.setmode(GPIO.BCM)  # Usa la numeración BCM de los pines
+GPIO.setup(7, GPIO.OUT)  # Configura el pin GPIO7 como salida (pin 7 de J8)
+
+# Configuración del PWM en el pin GPIO7 a 50 Hz (frecuencia estándar para servos)
+pwm = GPIO.PWM(7, 50)
+
+# Inicia el PWM con un ciclo de trabajo del 0% (en reposo)
+pwm.start(0)
+
 
 
 #a simple function to test different butter images I have saved. I'ts not actually needed
@@ -257,8 +268,11 @@ class ButterDetector:
         else:
             return None
 
-
-
+def mover_servo(angulo):
+    # Calcula el ciclo de trabajo correspondiente al ángulo
+    duty_cycle = (angulo / 18) + 2
+    pwm.ChangeDutyCycle(duty_cycle)  # Cambia el ciclo de trabajo
+    pwm.ChangeDutyCycle(0)  # Detén el movimiento del servo
 
 def main():
     buttDetector = ButterDetector()
@@ -266,11 +280,16 @@ def main():
     if not vid.isOpened():
         print("Cannot open webcam")
         exit()
+    mover_servo(50)
+    
     while True:
         ret,frame = vid.read()
         buttDetector.receive_frame(frame)
         butter = buttDetector.get_butter()
-        print(str(butter.position[0])+" "+str(butter.position[1])+" "+butter.butter_score)
+        print(str(butter.position[0])+" "+str(butter.position[1])+" "+str(butter.butter_score))
+        if butter.butter_score>100:
+            mover_servo(110-np.abs((butter.position[0]-0.5)*2*60))
+
         if cv.waitKey(1) == ord('q'):
             break
     vid.release()
